@@ -7,15 +7,16 @@
     <style>
         :root { --primary: #1e3a8a; --accent: #facc15; --danger: #dc2626; --text: #ffffff; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: var(--text); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; text-align: center; }
-        .container { background: #1e293b; padding: 2rem; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 90%; max-width: 500px; }
+        .container { background: #1e293b; padding: 2rem; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 90%; max-width: 500px; margin: 20px; }
         button { background: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 1.1rem; margin: 10px 0; width: 100%; transition: transform 0.1s; }
         button:active { transform: scale(0.98); }
         .hidden { display: none; }
         .role-box { background: #334155; padding: 20px; border-radius: 10px; margin: 20px 0; font-size: 1.5rem; min-height: 50px; border: 2px solid #475569; }
         .impostor-text { color: var(--danger); font-weight: bold; }
         .card-text { color: var(--accent); font-weight: bold; text-transform: uppercase; }
-        input[type="number"] { padding: 10px; border-radius: 5px; border: none; width: 60px; font-size: 1.1rem; text-align: center; margin-bottom: 15px;}
+        input[type="number"], .name-input { padding: 10px; border-radius: 5px; border: none; font-size: 1rem; margin-bottom: 10px; width: 80%; background: #f8fafc; color: #0f172a; }
         .toggle-container { margin: 15px 0; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 0.9rem; }
+        #name-fields-container { margin-top: 20px; max-height: 250px; overflow-y: auto; background: #0f172a; padding: 15px; border-radius: 10px; border: 1px solid #334155; }
     </style>
 </head>
 <body>
@@ -24,33 +25,36 @@
     <h1>Clash Impostor</h1>
 
     <div id="setup-screen">
-        <p>Players (3-10):</p>
-        <input type="number" id="player-count" min="3" max="10" value="4">
+        <p>Number of Players (3-10):</p>
+        <input type="number" id="player-count" min="3" max="10" value="4" onchange="updateNameFields()">
         
+        <div id="name-fields-container">
+            </div>
+
         <div class="toggle-container">
             <input type="checkbox" id="fake-word-toggle" checked>
-            <label for="fake-word-toggle">Give Impostor a Similar "Fake Word"</label>
+            <label for="fake-word-toggle">Give Impostor a "Fake Word"</label>
         </div>
         
         <button onclick="startGame()">Start Battle</button>
     </div>
 
     <div id="pass-screen" class="hidden">
-        <h2 id="player-turn-label">Player 1</h2>
+        <h2 id="player-turn-label">Player Name</h2>
         <p>Pass the device to this player.</p>
         <button onclick="showRole()">Reveal Word/Role</button>
     </div>
 
     <div id="reveal-screen" class="hidden">
-        <h2>Your Identity</h2>
+        <h2 id="reveal-title">Your Identity</h2>
         <div class="role-box" id="role-display"></div>
         <button onclick="nextPlayer()">Done, Hide & Pass</button>
     </div>
 
     <div id="discussion-screen" class="hidden">
         <h2 style="color: var(--accent);">Clue Phase</h2>
-        <p>Everyone say <strong>one word clues</strong>.<br>Don't be too obvious!</p>
-        <div class="role-box">Discuss and find the Impostor!</div>
+        <p>Give <b>one word clues</b> in order.</p>
+        <div class="role-box">Vote for the Impostor!</div>
         <button onclick="revealImpostor()" style="background: var(--danger);">Reveal the Impostor</button>
     </div>
 
@@ -63,46 +67,62 @@
 </div>
 
 <script>
-    // Grouped cards to ensure "similar" items
     const cardGroups = [
         ["Giant", "Royal Giant", "Electro Giant", "Golem", "Elixir Golem", "Giant Skeleton"],
         ["Hog Rider", "Ram Rider", "Battle Ram", "Wall Breakers", "Royal Hogs"],
-        ["Fireball", "Arrows", "Zap", "The Log", "Poison", "Lightning", "Rocket", "Snowball", "Barbarian Barrel"],
+        ["Fireball", "Arrows", "Zap", "The Log", "Poison", "Lightning", "Rocket", "Snowball"],
         ["P.E.K.K.A.", "Mini P.E.K.K.A.", "Knight", "Prince", "Dark Prince", "Bandit"],
         ["Baby Dragon", "Inferno Dragon", "Electro Dragon", "Skeleton Dragons", "Phoenix"],
-        ["Minions", "Minion Horde", "Bats", "Mega Minion", "Phoenix"],
         ["Skeletons", "Skeleton Army", "Graveyard", "Guards", "Tombstone"],
         ["Princess", "Dart Goblin", "Magic Archer", "Firecracker", "Archer Queen", "Archers"],
         ["Ice Wizard", "Electro Wizard", "Wizard", "Mother Witch", "Witch", "Night Witch"],
         ["Tesla", "Inferno Tower", "Cannon", "Bomb Tower", "Mortar", "X-Bow"],
-        ["Miner", "Mighty Miner", "Goblin Drill", "Goblin Barrel"],
-        ["Valkyrie", "Mega Knight", "Bowler", "Executioner", "Golden Knight"]
+        ["Miner", "Mighty Miner", "Goblin Drill", "Goblin Barrel"]
     ];
 
-    let totalPlayers, currentPlayer = 0, impostorIndex, mainWord, fakeWord, isFakeEnabled;
+    let playerNames = [];
+    let currentPlayer = 0, impostorIndex, mainWord, fakeWord, isFakeEnabled;
+
+    window.onload = updateNameFields;
+
+    function updateNameFields() {
+        const count = document.getElementById('player-count').value;
+        const container = document.getElementById('name-fields-container');
+        container.innerHTML = "<p style='font-size:0.8rem; margin-bottom:10px;'>Edit Names (Optional):</p>";
+        
+        for (let i = 0; i < count; i++) {
+            const input = document.createElement('input');
+            input.type = "text";
+            input.className = "name-input";
+            input.value = `Player ${i+1}`; // Simple numbering as requested
+            input.id = `pname-${i}`;
+            container.appendChild(input);
+        }
+    }
 
     function startGame() {
-        totalPlayers = parseInt(document.getElementById('player-count').value);
+        const count = parseInt(document.getElementById('player-count').value);
         isFakeEnabled = document.getElementById('fake-word-toggle').checked;
         
-        if (totalPlayers < 3 || totalPlayers > 10) return alert("3-10 players only!");
+        playerNames = [];
+        for (let i = 0; i < count; i++) {
+            playerNames.push(document.getElementById(`pname-${i}`).value);
+        }
         
-        impostorIndex = Math.floor(Math.random() * totalPlayers);
-        
-        // Logic for picking similar words
+        impostorIndex = Math.floor(Math.random() * count);
         const randomGroup = cardGroups[Math.floor(Math.random() * cardGroups.length)];
         let shuffled = [...randomGroup].sort(() => 0.5 - Math.random());
         
         mainWord = shuffled[0];
-        fakeWord = shuffled[1]; // Pick a second card from the same group
+        fakeWord = shuffled[1];
         
         document.getElementById('setup-screen').classList.add('hidden');
         showPassScreen();
     }
 
     function showPassScreen() {
-        if (currentPlayer < totalPlayers) {
-            document.getElementById('player-turn-label').innerText = `Player ${currentPlayer + 1}`;
+        if (currentPlayer < playerNames.length) {
+            document.getElementById('player-turn-label').innerText = playerNames[currentPlayer];
             document.getElementById('pass-screen').classList.remove('hidden');
             document.getElementById('reveal-screen').classList.add('hidden');
         } else {
@@ -112,6 +132,7 @@
 
     function showRole() {
         const display = document.getElementById('role-display');
+        document.getElementById('reveal-title').innerText = playerNames[currentPlayer];
         document.getElementById('pass-screen').classList.add('hidden');
         document.getElementById('reveal-screen').classList.remove('hidden');
 
@@ -119,8 +140,6 @@
             let content = `<span class="impostor-text">YOU ARE THE IMPOSTOR</span>`;
             if (isFakeEnabled) {
                 content += `<br><br><small>Your decoy card is:</small><br><span class="card-text">${fakeWord}</span>`;
-            } else {
-                content += `<br><br><small>Good luck blending in!</small>`;
             }
             display.innerHTML = content;
         } else {
@@ -142,11 +161,11 @@
     function revealImpostor() {
         document.getElementById('discussion-screen').classList.add('hidden');
         document.getElementById('result-screen').classList.remove('hidden');
-        document.getElementById('impostor-name-display').innerText = `Player ${impostorIndex + 1}`;
+        document.getElementById('impostor-name-display').innerText = playerNames[impostorIndex];
         
         let summary = `The group's card was <b>${mainWord}</b>.`;
         if (isFakeEnabled) {
-            summary += `<br>The Impostor was trying to describe <b>${fakeWord}</b>!`;
+            summary += `<br>The Impostor was looking at <b>${fakeWord}</b>.`;
         }
         document.getElementById('word-reveal-summary').innerHTML = summary;
     }
